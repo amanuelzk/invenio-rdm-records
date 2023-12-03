@@ -5,7 +5,7 @@
 #
 # Invenio-RDM-Records is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
-
+from .modal import (SavedRecords,SaveRecordsSchema)
 """Invenio RDM module to create REST APIs."""
 
 from .config import (
@@ -29,6 +29,7 @@ from .resources import (
 )
 
 __all__ = (
+    "SavedRecords",
     "IIIFResource",
     "IIIFResourceConfig",
     "RDMCommunityRecordsResource",

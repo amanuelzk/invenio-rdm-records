@@ -120,7 +120,7 @@ class RDMRecordResourceConfig(RecordResourceConfig, ConfiguratorMixin):
     url_prefix = "/records"
 
     routes = RecordResourceConfig.routes
-
+    routes["saved"] = "/saved"
     # PIDs
     routes["item-pids-reserve"] = "/<pid_value>/draft/pids/<scheme>"
     # Review
