@@ -42,7 +42,8 @@ from invenio_records_resources.resources.records.utils import search_preference
 from invenio_stats import current_stats
 from sqlalchemy.exc import NoResultFound
 from werkzeug.utils import secure_filename
-
+from .modal import  SavedRecords
+from invenio_accounts.models import LoginInformation
 from .serializers import (
     IIIFCanvasV2JSONSerializer,
     IIIFInfoV2JSONSerializer,
@@ -85,10 +86,40 @@ class RDMRecordResource(RecordResource):
             route("POST", p(routes["set-record-quota"]), self.set_record_quota),
             # TODO: move to users?
             route("POST", routes["set-user-quota"], self.set_user_quota),
-        ]
+            route("POST", p(routes["saved"]), self.saved),
+            route("GET", p(routes["saved"]), self.get_saved)
+    ]
 
         return url_rules
-
+    def userInfo(self):
+       for i in LoginInformation.query.all():
+            user_id = i.user_id 
+       return user_id
+        
+    useer_id = userInfo
+    @response_handler()
+    def saved(self):
+       user_id = self.userInfo()
+       request_data = request.get_json()
+       me = SavedRecords(user_id,record_id=request_data["record_id"])
+       db.session.add(me)
+       db.session.commit()
+       return request_data, 200  # HTTP 200 status code.
+    
+    @request_view_args
+    def get_saved(self):
+        lists = []
+        data ={"hits":[]}
+        print(data["hits"])
+        user_id = self.userInfo()
+        for record in SavedRecords.query.filter_by(user_id=user_id):
+             lists.append(record.record_id)
+        result = RDMRecordMetadata.query.filter(RDMRecordMetadata.json["id"].in_(lists))
+        for r in result:
+            data["hits"].append(r.json)
+        print("getting saved items")
+        print(data["hits"])
+        return data
     @request_extra_args
     @request_read_args
     @request_view_args
