@@ -22,3 +22,8 @@ export { SubjectsField } from "./SubjectsField";
 export { TitlesField } from "./TitlesField";
 export { VersionField } from "./VersionField";
 export { ComingSoonField } from "./ComingSoonField";
+// Three fields only for RIK
+export { OriginField } from "./OriginField";
+export { AuthorDeclarationField } from "./AuthorDeclarationField";
+export { ConsentField } from "./ConsentField";
+
