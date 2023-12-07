@@ -13,6 +13,7 @@
 from functools import wraps
 
 from flask import abort, current_app, g, redirect, send_file, url_for
+from invenio_db import db
 from flask_cors import cross_origin
 from flask_resources import (
     HTTPJSONException,
