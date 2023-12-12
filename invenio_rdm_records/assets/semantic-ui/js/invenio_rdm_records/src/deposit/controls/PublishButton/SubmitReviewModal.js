@@ -56,16 +56,18 @@ export class SubmitReviewModal extends Component {
         "Your upload will be <bold>immediately published</bold> in '{{communityTitle}}'. You will no longer be able to change the files in the upload! However, you will still be able to update the record's metadata later.",
         { communityTitle }
       );
+      msgWarningText2 = i18next.t("I have the right to upload this resource.");
       submitBtnLbl = i18next.t("Publish record to community");
     };
 
-    let headerTitle, msgWarningTitle, msgWarningText1, submitBtnLbl;
+    let headerTitle, msgWarningTitle, msgWarningText1, submitBtnLbl, msgWarningText2;
     // if record is passed and it is published
     if (record?.is_published) {
       headerTitle = i18next.t("Submit to community");
       msgWarningTitle = i18next.t(
         "Before submitting to community, please read and check the following:"
       );
+      msgWarningText2 = i18next.t("I have the right to upload this resource.");
       submitBtnLbl = i18next.t("Submit to community");
     }
     // else record is a draft
@@ -80,6 +82,7 @@ export class SubmitReviewModal extends Component {
         msgWarningText1 = i18next.t(
           "If your upload is accepted by the community curators, it will be <bold>immediately published</bold>. Before that, you will still be able to modify metadata and files of this upload."
         );
+        msgWarningText2 = i18next.t("I have the right to upload this resource.");
         submitBtnLbl = i18next.t("Submit record for review");
       }
     }
@@ -94,6 +97,10 @@ export class SubmitReviewModal extends Component {
             [true],
             i18next.t("You must accept this.")
           ),
+          acceptAfterPublishRecordTwo: Yup.bool().oneOf(
+            [true],
+            i18next.t("You must accept this.")
+          ),
         });
         return this.ConfirmSubmitReviewSchema.concat(additionalValidationSchema);
       }
@@ -104,6 +111,7 @@ export class SubmitReviewModal extends Component {
         initialValues={{
           acceptAccessToRecord: false,
           acceptAfterPublishRecord: false,
+          acceptAfterPublishRecordTwo: false,
           reviewComment: initialReviewComment || "",
         }}
         onSubmit={onSubmit}
@@ -192,6 +200,35 @@ export class SubmitReviewModal extends Component {
                       />
                     </Form.Field>
                   )}
+                  <Form.Field>
+                    <RadioField
+                      control={Checkbox}
+                      fieldPath="acceptAfterPublishRecordTwo"
+                      label={
+                        <Trans
+                          defaults={msgWarningText2}
+                          values={{
+                            communityTitle: communityTitle,
+                          }}
+                          components={{ bold: <b /> }}
+                        />
+                      }
+                      checked={_get(values, "acceptAfterPublishRecordTwo") === true}
+                      onChange={({ data, formikProps }) => {
+                        formikProps.form.setFieldValue(
+                          "acceptAfterPublishRecordTwo",
+                          data.checked
+                        );
+                      }}
+                      optimized
+                    />
+                    <ErrorLabel
+                      role="alert"
+                      fieldPath="acceptAfterPublishRecordTwo"
+                      className="mt-0 mb-5"
+                    />
+                  </Form.Field>
+
                   {!directPublish && (
                     <TextAreaField
                       fieldPath="reviewComment"
