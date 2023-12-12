@@ -67,7 +67,6 @@ export class SubmitReviewModal extends Component {
       msgWarningTitle = i18next.t(
         "Before submitting to community, please read and check the following:"
       );
-      msgWarningText2 = i18next.t("I have the right to upload this resource.");
       submitBtnLbl = i18next.t("Submit to community");
     }
     // else record is a draft
