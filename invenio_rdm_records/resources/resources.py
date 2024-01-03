@@ -112,6 +112,7 @@ class RDMRecordResource(RecordResource):
         msg.body = f"Name: {name}\nEmail: {email}\nSubject:{subject}\nDescription: {description}"
         mail = current_app.extensions.get('mail')
         mail.send(msg)
+        return "Message sent!"
     @response_handler()
     def saved(self):
        user_id = self.userInfo()
