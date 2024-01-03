@@ -15,6 +15,7 @@ from functools import wraps
 from flask import abort, current_app, g, redirect, send_file, url_for,request
 from invenio_db import db
 from flask_cors import cross_origin
+from flask_mail import Message
 from flask_resources import (
     HTTPJSONException,
     Resource,
@@ -88,7 +89,8 @@ class RDMRecordResource(RecordResource):
             # TODO: move to users?
             route("POST", routes["set-user-quota"], self.set_user_quota),
             route("POST", p(routes["saved"]), self.saved),
-            route("GET", p(routes["saved"]), self.get_saved)
+            route("GET", p(routes["saved"]), self.get_saved),
+            route("POST",p(routes["send_email"]),self.send_email),
     ]
 
         return url_rules
@@ -98,6 +100,18 @@ class RDMRecordResource(RecordResource):
        return user_id
         
     useer_id = userInfo
+    def send_email(self):
+       request_data = request.get_json()
+       name = request_data.get('name')
+       email = request_data.get('email')
+       subject= request_data.get('subject')
+       description = request_data.get('message')
+      
+       with current_app.app_context():
+        msg = Message('Message from gresis user', sender='contact@gresis.org', recipients=['contact@gresis.org'])
+        msg.body = f"Name: {name}\nEmail: {email}\nSubject:{subject}\nDescription: {description}"
+        mail = current_app.extensions.get('mail')
+        mail.send(msg)
     @response_handler()
     def saved(self):
        user_id = self.userInfo()
