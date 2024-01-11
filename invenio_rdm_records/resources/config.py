@@ -121,6 +121,9 @@ class RDMRecordResourceConfig(RecordResourceConfig, ConfiguratorMixin):
 
     routes = RecordResourceConfig.routes
     routes["saved"] = "/saved"
+    routes["send_email"] = "/send_email"
+    routes["communites"]="/communites"
+    routes["role"]="/role"
     # PIDs
     routes["item-pids-reserve"] = "/<pid_value>/draft/pids/<scheme>"
     # Review
