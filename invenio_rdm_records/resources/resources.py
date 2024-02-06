@@ -11,10 +11,16 @@
 
 """Bibliographic Record Resource."""
 from functools import wraps
+import json
+import uuid
 
-from flask import abort, current_app, g, redirect, send_file, url_for,request
+from invenio_userprofiles import current_userprofile
+from flask_login import current_user
+
+from flask import abort, current_app, g, redirect, send_file, url_for, request, jsonify
 from invenio_db import db
 from flask_cors import cross_origin
+from flask_mail import Message
 from flask_resources import (
     HTTPJSONException,
     Resource,
@@ -39,20 +45,27 @@ from invenio_records_resources.resources.records.resource import (
     request_search_args,
     request_view_args,
 )
+from invenio_rdm_records.records.models import RDMRecordMetadata
 from invenio_records_resources.resources.records.utils import search_preference
 from invenio_stats import current_stats
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy.sql.expression import update
 from werkzeug.utils import secure_filename
-from .modal import  SavedRecords
-from invenio_accounts.models import LoginInformation
+from .modal import SavedRecords
+from invenio_accounts.models import LoginInformation, Role, User
 from .serializers import (
     IIIFCanvasV2JSONSerializer,
     IIIFInfoV2JSONSerializer,
     IIIFManifestV2JSONSerializer,
     IIIFSequenceV2JSONSerializer,
 )
-
-
+from invenio_communities.communities.records.models import CommunityMetadata
+from invenio_communities.members.records.models import MemberModel
+from sqlalchemy.orm import joinedload
+from invenio_requests.records.models import RequestMetadata
+from sqlalchemy import func
+from sqlalchemy import  text
+from sqlalchemy.orm import make_transient, scoped_session
 class RDMRecordResource(RecordResource):
     """RDM record resource."""
 
@@ -88,39 +101,223 @@ class RDMRecordResource(RecordResource):
             # TODO: move to users?
             route("POST", routes["set-user-quota"], self.set_user_quota),
             route("POST", p(routes["saved"]), self.saved),
-            route("GET", p(routes["saved"]), self.get_saved)
-    ]
+            route("POST", p(routes["send_email"]), self.send_email),
+            route("GET", p(routes["saved"]), self.get_saved),
+            route("POST", p(routes["communites"]), self.createCommunites),
+            route("GET", p(routes["role"]), self.userRole),
+            route("GET", p(routes["role_user"]), self.role),
+            route("POST", p(routes["language"]), self.language),
+            route("POST",p(routes["request_num"]),self.requestCount),
+            route("POST",p(routes["request_list"]),self.requestAccept)
+            
+        ]
 
         return url_rules
+
     def userInfo(self):
-       for i in LoginInformation.query.all():
-            user_id = i.user_id 
-       return user_id
+        if current_user.is_authenticated:
+            user_id = current_user.get_id()
+            return user_id
+
+        else:
+            print("No user is currently logged in.")
+
+    def createCommunites(self):
+        institution = current_userprofile.affiliations.lower()
+        institution = institution.replace(" ", "_")
+
+        user_id = str(uuid.uuid4())
+
+        role = ""
+        user_ids = self.userInfo()
+        user = (
+            User.query.filter(User.id == user_ids)
+            .options(joinedload(User.roles))
+            .first()
+        )
+       
+        # users_with_role = User.query.join(User.roles).filter(Role.name == reviewer).all()
+        count_users_with_role = (
+            db.session.query(func.count(User.id))
+            .join(User.roles)
+            .filter(Role.name == 'reviewer')
+            .scalar()
+        )
+        if user:
+            roles = user.roles
+            for role in roles:
+                role = role.name
+
+        else:
+            print("User not found.")
+        if role == "student":
+            identifer = f"{institution}_{user_id}_student"
+            data = {"institution": institution, "identifer": identifer}
+        elif role=='stuff':
+             data={"institution": "null", "identifer": "null"}
+        elif count_users_with_role <= 2:
+             data={"institution": "none", "identifer": "none"}
+             
+        else:
+            identifer = f"{institution}_{user_id}"
+            data = {"institution": institution, "identifer": identifer}
+
+        return data, 200
+    def role(self):
+        user_id = self.userInfo()
+        user = (
+            User.query.filter(User.id == user_id)
+            .options(joinedload(User.roles))
+            .first()
+        )
+        role=''
+        if user:
+            roles = user.roles
+            for role in roles:
+                role = role.name
+        role_data={"role":role}
+        return role_data
+    def userRole(self):
+        user_id = self.userInfo()
+        list_slug = []
+      
+        communities = CommunityMetadata.query.filter(
+            CommunityMetadata.deletion_status == "P"
+        ).all()
+        for community in communities:
+            if community.slug.split("_")[-1] == "student":
+                list_slug.append(community.id)
+
+        update_statement = (
+            update(CommunityMetadata)
+            .where(CommunityMetadata.id.in_(list_slug))
+            .values(community_status=True)
+        )
+
+        community_ids = [community.id for community in communities]
+        user_community_roles = MemberModel.query.filter(
+            MemberModel.user_id == user_id, MemberModel.community_id.in_(community_ids)
+        ).all()
         
+        community_statuses = []
+        for role in user_community_roles:
+            community = CommunityMetadata.query.filter(
+                CommunityMetadata.id == role.community_id
+            ).first()
+
+            if community:
+                community_status = {
+                    "id": str(community.id),
+                    "community_status": community.community_status,
+                    "role":role
+                    
+                }
+            community_statuses.append(community_status)
+        db.session.execute(update_statement)
+        db.session.commit()
+
+        return community_statuses
+    def language(self):
+        request_data = request.get_json()
+        lang=request_data["value"]
+        return "LANG"
+    def requestCount(self):
+        request_data = request.get_json()
+        account_id = current_user.get_id()
+        converted_int = int(account_id)
+        request_metadata = RequestMetadata.query.filter_by(id=request_data['id']).first()
+        request_metadata.ownerrequest_status
+        result={"id":request_data['id'],"owner_id":converted_int,"status":request_metadata.ownerrequest_status}
+        return result ,200
+
+
+    def requestAccept(self):
+        try:
+            user_instance = User.query.get(current_user.id)
+            with db.session.begin(subtransactions=True):  # Begin a transaction
+                db.session.refresh(user_instance)
+                account_id = user_instance.get_id()
+                converted_int = int(account_id)
+                request_data = request.get_json()
+                request_id = request_data['id']
+                table_name = 'request_metadata'
+                target_id = request_data['id']
+                new_json_data = {"status": "A", "owner_Id": converted_int}
+
+                update_query = f"""
+                    UPDATE {table_name}
+                    SET ownerrequest_status = ownerrequest_status || :new_json_data
+                    WHERE id = :target_id
+                """
+
+                db.session.execute(
+                    text(update_query),
+                    {'new_json_data': json.dumps(new_json_data), 'target_id': target_id}
+                )
+
+        except Exception as e:
+            db.session.rollback()
+            return {"error": str(e)}, 500
+        finally:
+            db.session.commit()
+        request_metadata = RequestMetadata.query.filter_by(id=request_id).first()
+        return request_metadata.ownerrequest_status, 200
+    def send_email(self):
+        request_data = request.get_json()
+        name = request_data.get("name")
+        email = request_data.get("email")
+        subject = request_data.get("subject")
+        description = request_data.get("message")
+        with current_app.app_context():
+            msg = Message(
+                "Message from gresis user",
+                sender="contact@gresis.org",
+                recipients=["contact@gresis.org"],
+            )
+            msg.body = f"Name: {name}\nEmail: {email}\nSubject:{subject}\nDescription: {description}"
+            mail = current_app.extensions.get("mail")
+            mail.send(msg)
+
+            return "Message sent!"
+
     useer_id = userInfo
+
     @response_handler()
     def saved(self):
-       user_id = self.userInfo()
-       request_data = request.get_json()
-       me = SavedRecords(user_id,record_id=request_data["record_id"])
-       db.session.add(me)
-       db.session.commit()
-       return request_data, 200  # HTTP 200 status code.
-    
+        user_id = self.userInfo()
+
+        request_data = request.get_json()
+        me = SavedRecords(user_id, record_id=request_data["record_id"])
+        db.session.add(me)
+        db.session.commit()
+        return request_data, 200  # HTTP 200 status code.
+
     @request_view_args
     def get_saved(self):
         lists = []
-        data ={"hits":[]}
-        print(data["hits"])
+        role = ""
         user_id = self.userInfo()
+        user = (
+            User.query.filter(User.id == user_id)
+            .options(joinedload(User.roles))
+            .first()
+        )
+
+        if user:
+            roles = user.roles
+            for role in roles:
+                role = role.name
+        else:
+            print("User not found.")
+        data = {"hits": []}
         for record in SavedRecords.query.filter_by(user_id=user_id):
-             lists.append(record.record_id)
+            lists.append(record.record_id)
         result = RDMRecordMetadata.query.filter(RDMRecordMetadata.json["id"].in_(lists))
         for r in result:
             data["hits"].append(r.json)
-        print("getting saved items")
-        print(data["hits"])
+
         return data
+
     @request_extra_args
     @request_read_args
     @request_view_args
@@ -786,7 +983,7 @@ class IIIFResource(ErrorHandlersMixin, Resource):
         uuid = resource_requestctx.view_args["uuid"]
         key = resource_requestctx.view_args["file_name"]
         file_ = self.service.get_file(uuid=uuid, identity=g.identity, key=key)
-        return file_.to_dict(), 200
+        return file_, 200
 
     @cross_origin(origin="*", methods=["GET"])
     @with_iiif_content_negotiation(IIIFInfoV2JSONSerializer)
