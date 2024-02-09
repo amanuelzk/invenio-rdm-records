@@ -128,7 +128,7 @@ class RDMRecordResourceConfig(RecordResourceConfig, ConfiguratorMixin):
     routes["language"]="/lang"
     routes["request_num"]="/request_num"
     routes["request_list"]="/request_list"
-   
+    routes["email_reviewer"]="/email_reviewer"
     # PIDs
     routes["item-pids-reserve"] = "/<pid_value>/draft/pids/<scheme>"
     # Review
