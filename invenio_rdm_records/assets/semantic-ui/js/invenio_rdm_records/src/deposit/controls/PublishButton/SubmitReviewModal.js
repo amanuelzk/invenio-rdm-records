@@ -3,6 +3,7 @@
 //
 // Invenio-RDM-Records is free software; you can redistribute it and/or modify it
 // under the terms of the MIT License; see LICENSE file for more details.
+/* eslint-disable */
 
 import { i18next } from "@translations/invenio_rdm_records/i18next";
 import { Formik } from "formik";
@@ -18,14 +19,49 @@ import {
 } from "react-invenio-forms";
 import { Button, Checkbox, Form, Icon, Message, Modal } from "semantic-ui-react";
 import * as Yup from "yup";
-
+import {  http } from "react-invenio-forms";
 export class SubmitReviewModal extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      slugFunctionCalled: false,
+    };
+  }
+
   componentDidMount() {
     // A11y: Focus the first input field in the form
     const firstFormFieldWrap = document.getElementById("accept-access-checkbox");
     const checkboxElem = firstFormFieldWrap.querySelector("input");
     checkboxElem?.focus();
   }
+
+  slug = async () => {
+    // Extract the string after "community"
+    let url = window.location.href
+    const queryParams = new URLSearchParams(url.split('?')[1]);
+    const communityValue = queryParams.get('community');
+    let h = {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      //  "Authorization": "Bearer"  + token
+    };
+
+    await http
+      .post(
+        'https://127.0.0.1:5000/api/records/email_reviewer',
+        {"communityValue": communityValue},
+        {
+          h: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          withCredentials: true,
+        }
+      )
+      .then((resp) => {
+        console.log(resp);
+      });
+  };
 
   ConfirmSubmitReviewSchema = Yup.object({
     acceptAccessToRecord: Yup.bool().oneOf([true], i18next.t("You must accept this.")),
@@ -56,11 +92,10 @@ export class SubmitReviewModal extends Component {
         "Your upload will be <bold>immediately published</bold> in '{{communityTitle}}'. You will no longer be able to change the files in the upload! However, you will still be able to update the record's metadata later.",
         { communityTitle }
       );
-      msgWarningText2 = i18next.t("I have the right to upload this resource.");
       submitBtnLbl = i18next.t("Publish record to community");
     };
 
-    let headerTitle, msgWarningTitle, msgWarningText1, submitBtnLbl, msgWarningText2;
+    let headerTitle, msgWarningTitle, msgWarningText1, submitBtnLbl;
     // if record is passed and it is published
     if (record?.is_published) {
       headerTitle = i18next.t("Submit to community");
@@ -81,7 +116,6 @@ export class SubmitReviewModal extends Component {
         msgWarningText1 = i18next.t(
           "If your upload is accepted by the community curators, it will be <bold>immediately published</bold>. Before that, you will still be able to modify metadata and files of this upload."
         );
-        msgWarningText2 = i18next.t("I have the right to upload this resource.");
         submitBtnLbl = i18next.t("Submit record for review");
       }
     }
@@ -89,14 +123,11 @@ export class SubmitReviewModal extends Component {
     // acceptAfterPublishRecord checkbox is absent if record is published
     const schema = () => {
       if (record) {
+        console.log("lll" + record);
         return this.ConfirmSubmitReviewSchema;
       } else {
         const additionalValidationSchema = Yup.object({
           acceptAfterPublishRecord: Yup.bool().oneOf(
-            [true],
-            i18next.t("You must accept this.")
-          ),
-          acceptAfterPublishRecordTwo: Yup.bool().oneOf(
             [true],
             i18next.t("You must accept this.")
           ),
@@ -110,10 +141,21 @@ export class SubmitReviewModal extends Component {
         initialValues={{
           acceptAccessToRecord: false,
           acceptAfterPublishRecord: false,
-          acceptAfterPublishRecordTwo: false,
           reviewComment: initialReviewComment || "",
         }}
-        onSubmit={onSubmit}
+        onSubmit={(values, { setSubmitting }) => {
+          // Add the following lines to call the slug function before submitting the form
+          if (!this.state.slugFunctionCalled) {
+            this.slug();
+            this.setState({ slugFunctionCalled: true });
+          }
+
+          // Perform the actual form submission
+          onSubmit(values);
+
+          // Set submitting to false after form submission
+          setSubmitting(false);
+        }}
         validationSchema={schema}
         validateOnChange={false}
         validateOnBlur={false}
@@ -199,35 +241,6 @@ export class SubmitReviewModal extends Component {
                       />
                     </Form.Field>
                   )}
-                  <Form.Field>
-                    <RadioField
-                      control={Checkbox}
-                      fieldPath="acceptAfterPublishRecordTwo"
-                      label={
-                        <Trans
-                          defaults={msgWarningText2}
-                          values={{
-                            communityTitle: communityTitle,
-                          }}
-                          components={{ bold: <b /> }}
-                        />
-                      }
-                      checked={_get(values, "acceptAfterPublishRecordTwo") === true}
-                      onChange={({ data, formikProps }) => {
-                        formikProps.form.setFieldValue(
-                          "acceptAfterPublishRecordTwo",
-                          data.checked
-                        );
-                      }}
-                      optimized
-                    />
-                    <ErrorLabel
-                      role="alert"
-                      fieldPath="acceptAfterPublishRecordTwo"
-                      className="mt-0 mb-5"
-                    />
-                  </Form.Field>
-
                   {!directPublish && (
                     <TextAreaField
                       fieldPath="reviewComment"
