@@ -45,6 +45,7 @@ from invenio_records_resources.resources.records.resource import (
     request_search_args,
     request_view_args,
 )
+from sqlalchemy.orm import aliased
 from invenio_rdm_records.records.models import RDMRecordMetadata
 from invenio_records_resources.resources.records.utils import search_preference
 from invenio_stats import current_stats
@@ -68,7 +69,7 @@ from sqlalchemy import  text
 from sqlalchemy.orm import make_transient, scoped_session
 class RDMRecordResource(RecordResource):
     """RDM record resource."""
-
+    global_variable = ""
     def create_url_rules(self):
         """Create the URL rules for the record resource."""
 
@@ -108,7 +109,8 @@ class RDMRecordResource(RecordResource):
             route("GET", p(routes["role_user"]), self.role),
             route("POST", p(routes["language"]), self.language),
             route("POST",p(routes["request_num"]),self.requestCount),
-            route("POST",p(routes["request_list"]),self.requestAccept)
+            route("POST",p(routes["request_list"]),self.requestAccept),
+             route("POST",p(routes["email_reviewer"]),self.emailReviewer)
             
         ]
 
@@ -121,7 +123,35 @@ class RDMRecordResource(RecordResource):
 
         else:
             print("No user is currently logged in.")
+    def emailReviewer(self):
+        request_data = request.get_json()
+        request_metadata = CommunityMetadata.query.filter_by(slug=request_data['communityValue']).first()
+        print(request_metadata)
+        community_id = request_metadata.id
+        UserAlias = aliased(User, name="au")
+        query = (
+            db.session.query(MemberModel, UserAlias.email)
+            .join(UserAlias, MemberModel.user_id == UserAlias.id)
+            .filter(MemberModel.community_id == community_id)
+        )
+        results = query.all()
+        
+        for result in results:
+            member_data, user_email = result
+            # print(f"Member Data: {member_data}, User Email: {user_email}")
+            
+            with current_app.app_context():
+                msg = Message(
+                    "Message from gresis user",
+                    sender="contact@gresis.org",
+                    recipients=[user_email], 
+                )
+                msg.body = 'https://127.0.0.1:5000/me/communities?q=&l=list&p=1&s=10&sort=newest'  
+                mail = current_app.extensions.get("mail")
+                mail.send(msg)
 
+        print(community_id)
+        return request_data
     def createCommunites(self):
         institution = current_userprofile.affiliations.lower()
         institution = institution.replace(" ", "_")
@@ -135,7 +165,15 @@ class RDMRecordResource(RecordResource):
             .options(joinedload(User.roles))
             .first()
         )
-       
+        account_id = current_user.get_id()
+        converted_int = int(account_id)
+        role_id='reviewer'
+        email_id=[]
+        users_with_role = User.query.join(User.roles).filter(Role.id == role_id).all()
+        for user in users_with_role:
+            if user.id != converted_int:
+                email_id.append(user.email) 
+        
         # users_with_role = User.query.join(User.roles).filter(Role.name == reviewer).all()
         count_users_with_role = (
             db.session.query(func.count(User.id))
@@ -147,20 +185,22 @@ class RDMRecordResource(RecordResource):
             roles = user.roles
             for role in roles:
                 role = role.name
-
+        
         else:
             print("User not found.")
         if role == "student":
             identifer = f"{institution}_{user_id}_student"
             data = {"institution": institution, "identifer": identifer}
+            global_variable=data
         elif role=='stuff':
              data={"institution": "null", "identifer": "null"}
         elif count_users_with_role <= 2:
              data={"institution": "none", "identifer": "none"}
-             
+             global_variable=data
         else:
             identifer = f"{institution}_{user_id}"
             data = {"institution": institution, "identifer": identifer}
+              # Debug print
 
         return data, 200
     def role(self):
@@ -226,7 +266,7 @@ class RDMRecordResource(RecordResource):
         account_id = current_user.get_id()
         converted_int = int(account_id)
         request_metadata = RequestMetadata.query.filter_by(id=request_data['id']).first()
-        request_metadata.ownerrequest_status
+        # request_metadata.ownerrequest_status
         result={"id":request_data['id'],"owner_id":converted_int,"status":request_metadata.ownerrequest_status}
         return result ,200
 
@@ -263,20 +303,20 @@ class RDMRecordResource(RecordResource):
         request_metadata = RequestMetadata.query.filter_by(id=request_id).first()
         return request_metadata.ownerrequest_status, 200
     def send_email(self):
-        request_data = request.get_json()
-        name = request_data.get("name")
-        email = request_data.get("email")
-        subject = request_data.get("subject")
-        description = request_data.get("message")
-        with current_app.app_context():
-            msg = Message(
-                "Message from gresis user",
-                sender="contact@gresis.org",
-                recipients=["contact@gresis.org"],
-            )
-            msg.body = f"Name: {name}\nEmail: {email}\nSubject:{subject}\nDescription: {description}"
-            mail = current_app.extensions.get("mail")
-            mail.send(msg)
+        # request_data = request.get_json()
+        # name = request_data.get("name")
+        # email = request_data.get("email")
+        # subject = request_data.get("subject")
+        # description = request_data.get("message")
+        # with current_app.app_context():
+        #     msg = Message(
+        #         "Message from gresis user",
+        #         sender="contact@gresis.org",
+        #         recipients=["contact@gresis.org"],
+        #     )
+        #     msg.body = f"Name: {name}\nEmail: {email}\nSubject:{subject}\nDescription: {description}"
+        #     mail = current_app.extensions.get("mail")
+        #     mail.send(msg)
 
             return "Message sent!"
 
@@ -461,7 +501,8 @@ class RDMRecordResource(RecordResource):
         require_review = False
         if resource_requestctx.data:
             require_review = resource_requestctx.data.pop("require_review", False)
-
+            
+        
         item = self.service.review.submit(
             g.identity,
             resource_requestctx.view_args["pid_value"],
